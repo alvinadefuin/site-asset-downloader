@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  site-asset-downloader:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - MAX_FILE_SIZE=104857600
+      - DOWNLOAD_TIMEOUT=30000
+      - CONCURRENT_DOWNLOADS=5
+      - CLEANUP_INTERVAL=3600000
+      - LOG_LEVEL=info
+      - RATE_LIMIT_WINDOW=900000
+      - RATE_LIMIT_MAX=100
+    volumes:
+      - downloads_data:/app/downloads
+      - logs_data:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+
+volumes:
+  downloads_data:
+    driver: local
+  logs_data:
+    driver: local
