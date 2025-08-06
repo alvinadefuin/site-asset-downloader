@@ -42,7 +42,7 @@ class BrowserMediaExtractor {
       if (progressCallback) progressCallback('Launching browser...');
       
       this.browser = await puppeteer.launch({ 
-        headless: this.headless,
+        headless: this.headless ? "new" : false,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -50,18 +50,54 @@ class BrowserMediaExtractor {
           '--disable-gpu',
           '--no-first-run',
           '--no-zygote',
-          '--disable-extensions'
+          '--disable-extensions',
+          '--disable-blink-features=AutomationControlled',
+          '--disable-features=VizDisplayCompositor'
         ],
         timeout: this.timeout
       });
 
       page = await this.browser.newPage();
       
-      // Set user agent to avoid bot detection
-      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+      // Enhanced bot detection avoidance
+      await page.evaluateOnNewDocument(() => {
+        Object.defineProperty(navigator, 'webdriver', {
+          get: () => undefined,
+        });
+        
+        // Remove automation indicators
+        delete navigator.__proto__.webdriver;
+        
+        // Mock chrome runtime
+        window.chrome = {
+          runtime: {}
+        };
+        
+        // Mock permissions
+        const originalQuery = window.navigator.permissions.query;
+        window.navigator.permissions.query = (parameters) => (
+          parameters.name === 'notifications' ?
+            Promise.resolve({ state: Notification.permission }) :
+            originalQuery(parameters)
+        );
+      });
+      
+      // Set realistic user agent
+      await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
       
       // Set viewport for proper rendering
       await page.setViewport({ width: 1366, height: 768 });
+      
+      // Set additional headers to look more like a real browser
+      await page.setExtraHTTPHeaders({
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-User': '?1',
+        'Sec-Fetch-Dest': 'document'
+      });
 
       // Collect network requests to catch dynamically loaded media
       const mediaUrls = new Set();
@@ -81,11 +117,19 @@ class BrowserMediaExtractor {
 
       if (progressCallback) progressCallback('Loading page...');
       
-      // Navigate to the page
-      await page.goto(targetUrl, { 
-        waitUntil: 'networkidle2',
-        timeout: this.timeout 
-      });
+      // Navigate to the page with better error handling
+      try {
+        await page.goto(targetUrl, { 
+          waitUntil: ['networkidle0', 'domcontentloaded'],
+          timeout: this.timeout 
+        });
+      } catch (navigationError) {
+        // Try alternative navigation strategy
+        await page.goto(targetUrl, { 
+          waitUntil: 'domcontentloaded',
+          timeout: this.timeout 
+        });
+      }
 
       if (progressCallback) progressCallback('Waiting for content to load...');
       

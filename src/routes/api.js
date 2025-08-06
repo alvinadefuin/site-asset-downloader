@@ -2,13 +2,11 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const MediaExtractor = require('../extractor');
-const BrowserMediaExtractor = require('../browser-extractor');
 const DownloadManager = require('../downloader');
 const { createJobId, isValidUrl, formatBytes } = require('../utils');
 
 const router = express.Router();
 const extractor = new MediaExtractor();
-const browserExtractor = new BrowserMediaExtractor();
 const downloadManager = new DownloadManager();
 
 const activeJobs = new Map();
@@ -41,7 +39,6 @@ router.post('/extract', async (req, res) => {
     });
 
     try {
-      // For now, use enhanced static extractor (browser extractor requires Puppeteer installation)
       const results = await extractor.extractMedia(url, filters, (progress) => {
         const job = activeJobs.get(jobId);
         if (job) {
@@ -314,33 +311,6 @@ router.get('/stats', (req, res) => {
   res.json(stats);
 });
 
-function shouldUseBrowserExtractor(url) {
-  // List of domains/patterns that typically use heavy JavaScript for media loading
-  const jsHeavySites = [
-    'storyloop.com',
-    'shutterstock.com',
-    'gettyimages.com',
-    'adobe.com',
-    'unsplash.com',
-    'pexels.com',
-    'pixabay.com',
-    'instagram.com',
-    'pinterest.com',
-    'behance.net',
-    'dribbble.com',
-    'artstation.com'
-  ];
-  
-  try {
-    const urlObj = new URL(url);
-    const hostname = urlObj.hostname.toLowerCase();
-    
-    // Check if the hostname matches any known JS-heavy sites
-    return jsHeavySites.some(site => hostname.includes(site));
-  } catch {
-    return false;
-  }
-}
 
 const cleanupOldJobs = () => {
   const cutoffTime = Date.now() - (2 * 60 * 60 * 1000); // 2 hours
