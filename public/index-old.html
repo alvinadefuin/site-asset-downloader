@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Site Asset Downloader</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    animation: {
+                        'pulse-ring': 'pulse-ring 2s cubic-bezier(0.455, 0.03, 0.515, 0.955) infinite',
+                        'bounce-slow': 'bounce 2s infinite',
+                    },
+                    keyframes: {
+                        'pulse-ring': {
+                            '0%': { transform: 'scale(1)', opacity: '1' },
+                            '100%': { transform: 'scale(2)', opacity: '0' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <meta name="description" content="Extract and download images and videos from any website">
+</head>
+<body class="bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
+    <div class="min-h-screen flex flex-col">
+        <!-- Header -->
+        <header class="bg-gradient-to-r from-blue-600 to-indigo-700 text-white shadow-xl">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative">
+                <div class="text-center">
+                    <h1 class="text-4xl md:text-5xl font-bold mb-3 flex items-center justify-center gap-3">
+                        <span class="text-5xl">📥</span>
+                        Site Asset Downloader
+                    </h1>
+                    <p class="text-xl text-blue-100 mb-6">Extract and download images and videos from any website</p>
+                </div>
+                
+                <!-- Theme Toggle -->
+                <button id="themeToggle" class="absolute top-4 right-4 p-3 bg-white/10 hover:bg-white/20 rounded-full transition-all duration-200 backdrop-blur-sm">
+                    <span id="themeIcon" class="text-2xl">🌙</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
+            <!-- Input Section -->
+            <section class="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 p-6 md:p-8 mb-8">
+                <div class="mb-8">
+                    <div class="flex flex-col md:flex-row gap-4 mb-4">
+                        <input 
+                            type="url" 
+                            id="urlInput" 
+                            placeholder="Enter website URL (e.g., https://example.com)" 
+                            class="flex-1 px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white transition-colors duration-200"
+                        >
+                        <button id="extractBtn" class="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none">
+                            <span id="btnText">Extract Media</span>
+                            <span id="loadingSpinner" class="hidden">
+                                <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Processing...
+                            </span>
+                        </button>
+                    </div>
+                    <div id="urlValidation" class="text-sm ml-1"></div>
+                </div>
+
+                <!-- Filters -->
+                <div class="grid md:grid-cols-2 gap-6">
+                    <!-- Media Types -->
+                    <div class="bg-gray-50 dark:bg-gray-700 rounded-xl p-6">
+                        <h3 class="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Media Types</h3>
+                        <div class="space-y-3">
+                            <label class="flex items-center space-x-3 cursor-pointer group">
+                                <input type="checkbox" id="includeImages" checked class="w-5 h-5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600">
+                                <span class="text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Images</span>
+                            </label>
+                            <label class="flex items-center space-x-3 cursor-pointer group">
+                                <input type="checkbox" id="includeVideos" checked class="w-5 h-5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600">
+                                <span class="text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Videos</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Size Filters -->
+                    <div class="bg-gray-50 dark:bg-gray-700 rounded-xl p-6">
+                        <h3 class="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Size Filters</h3>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Min Size (KB)</label>
+                                <input type="number" id="minSize" min="0" value="0" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-600 dark:text-white">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Max Size (MB)</label>
+                                <input type="number" id="maxSize" min="1" value="100" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-600 dark:text-white">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Status Section -->
+            <section id="statusSection" class="hidden bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 p-6 md:p-8 mb-8">
+                <div class="max-w-2xl mx-auto text-center">
+                    <div class="flex items-center justify-center mb-6">
+                        <div class="relative">
+                            <div class="w-4 h-4 bg-blue-600 rounded-full"></div>
+                            <div class="absolute inset-0 w-4 h-4 bg-blue-600 rounded-full animate-pulse-ring"></div>
+                        </div>
+                        <h3 id="statusTitle" class="text-xl font-semibold ml-4 text-gray-900 dark:text-white">Extracting Media...</h3>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 mb-2">
+                            <div id="progressFill" class="bg-gradient-to-r from-blue-600 to-green-500 h-3 rounded-full transition-all duration-300" style="width: 0%"></div>
+                        </div>
+                        <p id="progressText" class="text-sm text-gray-600 dark:text-gray-400">Starting...</p>
+                    </div>
+                    
+                    <p id="statusDetails" class="text-sm text-gray-500 dark:text-gray-400 italic"></p>
+                </div>
+            </section>
+
+            <!-- Results Section -->
+            <section id="resultsSection" class="hidden bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 p-6 md:p-8 mb-8">
+                <!-- Results Header -->
+                <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6 gap-4">
+                    <div>
+                        <h2 id="resultsTitle" class="text-2xl font-bold text-gray-900 dark:text-white mb-2">Found Media</h2>
+                        <div id="resultsStats" class="flex flex-wrap gap-4 text-sm text-gray-600 dark:text-gray-400"></div>
+                    </div>
+                    <div class="flex flex-wrap gap-3">
+                        <button id="selectAllBtn" class="px-4 py-2 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors">Select All</button>
+                        <button id="clearSelectionBtn" class="px-4 py-2 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors">Clear All</button>
+                        <button id="downloadSelectedBtn" class="px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none" disabled>
+                            Download Selected (<span id="selectedCount">0</span>)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Filters and Sort -->
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
+                    <div class="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+                        <button class="filter-tab px-4 py-2 rounded-md transition-colors active" data-filter="all">All</button>
+                        <button class="filter-tab px-4 py-2 rounded-md transition-colors" data-filter="images">Images</button>
+                        <button class="filter-tab px-4 py-2 rounded-md transition-colors" data-filter="videos">Videos</button>
+                    </div>
+                    <select id="sortSelect" class="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white">
+                        <option value="size-desc">Size (Largest)</option>
+                        <option value="size-asc">Size (Smallest)</option>
+                        <option value="type">Type</option>
+                        <option value="name">Name</option>
+                    </select>
+                </div>
+
+                <!-- Media Grid -->
+                <div id="mediaGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-6"></div>
+
+                <!-- Pagination -->
+                <div id="pagination" class="hidden flex items-center justify-center gap-4">
+                    <button id="prevPageBtn" class="px-4 py-2 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors disabled:opacity-50">Previous</button>
+                    <span id="pageInfo" class="text-gray-600 dark:text-gray-400">Page 1 of 1</span>
+                    <button id="nextPageBtn" class="px-4 py-2 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors disabled:opacity-50">Next</button>
+                </div>
+            </section>
+
+            <!-- Download Section -->
+            <section id="downloadSection" class="hidden bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 p-6 md:p-8 mb-8">
+                <h3 class="text-xl font-semibold mb-6 text-gray-900 dark:text-white">Download Progress</h3>
+                <div class="mb-4">
+                    <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4 mb-2">
+                        <div id="downloadProgressFill" class="bg-gradient-to-r from-blue-600 to-green-500 h-4 rounded-full transition-all duration-300" style="width: 0%"></div>
+                    </div>
+                    <div class="flex justify-between text-sm text-gray-600 dark:text-gray-400">
+                        <span id="downloadCount">0 / 0</span>
+                        <span id="downloadSpeed">0 KB/s</span>
+                        <span id="downloadETA">--:--</span>
+                    </div>
+                </div>
+                <p id="downloadCurrent" class="text-sm text-gray-500 dark:text-gray-400 italic">Preparing download...</p>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 py-8">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <p class="text-gray-600 dark:text-gray-400">&copy; 2025 Site Asset Downloader.</p>
+                    <div class="flex gap-6">
+                        <a href="/health" target="_blank" class="text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">API Health</a>
+                        <a href="https://github.com" target="_blank" class="text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">GitHub</a>
+                    </div>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toastContainer" class="fixed top-4 right-4 z-50 space-y-2"></div>
+
+    <!-- Modal -->
+    <div id="previewModal" class="fixed inset-0 bg-black bg-opacity-75 z-50 hidden items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl max-w-4xl max-h-[90vh] w-full overflow-hidden">
+            <div class="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+                <h3 id="modalTitle" class="text-xl font-semibold text-gray-900 dark:text-white">Media Preview</h3>
+                <button id="modalClose" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-2xl">&times;</button>
+            </div>
+            <div id="modalBody" class="p-6 overflow-auto max-h-[70vh]"></div>
+            <div class="flex justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-700">
+                <button id="modalDownload" class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors">Download</button>
+                <button id="modalCloseBtn" class="px-6 py-2 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
