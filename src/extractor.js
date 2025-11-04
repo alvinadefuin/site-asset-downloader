@@ -1,14 +1,15 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
-const { 
-  isValidUrl, 
-  normalizeUrl, 
-  isSupportedMediaType, 
-  isImageType, 
+const {
+  isValidUrl,
+  normalizeUrl,
+  isSupportedMediaType,
+  isImageType,
   isVideoType,
   extractUrlsFromCss,
   getDomainFromUrl,
-  validateMediaFilters
+  validateMediaFilters,
+  retryAsync
 } = require('./utils');
 
 class MediaExtractor {
@@ -110,32 +111,43 @@ class MediaExtractor {
   }
 
   async fetchHtml(url) {
-    try {
-      const response = await axios.get(url, {
-        timeout: this.timeout,
-        maxRedirects: this.maxRedirects,
-        headers: {
-          'User-Agent': this.userAgent,
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.5',
-          'Accept-Encoding': 'gzip, deflate',
-          'DNT': '1',
-          'Connection': 'keep-alive',
-          'Upgrade-Insecure-Requests': '1'
-        },
-        validateStatus: (status) => status >= 200 && status < 400
-      });
-      
-      return response;
-    } catch (error) {
-      if (error.response) {
-        throw new Error(`HTTP ${error.response.status}: ${error.response.statusText}`);
-      } else if (error.request) {
-        throw new Error('Network error: Unable to reach the website');
-      } else {
-        throw new Error(`Request error: ${error.message}`);
+    return retryAsync(
+      async () => {
+        try {
+          const response = await axios.get(url, {
+            timeout: this.timeout,
+            maxRedirects: this.maxRedirects,
+            headers: {
+              'User-Agent': this.userAgent,
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+              'Accept-Language': 'en-US,en;q=0.5',
+              'Accept-Encoding': 'gzip, deflate',
+              'DNT': '1',
+              'Connection': 'keep-alive',
+              'Upgrade-Insecure-Requests': '1'
+            },
+            validateStatus: (status) => status >= 200 && status < 400
+          });
+
+          return response;
+        } catch (error) {
+          if (error.response) {
+            throw new Error(`HTTP ${error.response.status}: ${error.response.statusText}`);
+          } else if (error.request) {
+            throw new Error('Network error: Unable to reach the website');
+          } else {
+            throw new Error(`Request error: ${error.message}`);
+          }
+        }
+      },
+      {
+        maxRetries: 3,
+        retryDelay: 1000,
+        onRetry: (attempt, maxRetries, waitTime) => {
+          console.log(`Retrying HTML fetch (${attempt}/${maxRetries}) after ${waitTime}ms...`);
+        }
       }
-    }
+    );
   }
 
   extractFromHtmlElements($, baseUrl, mediaUrls, filters) {
@@ -277,18 +289,27 @@ class MediaExtractor {
 
   async fetchAndParseCss(cssUrl, baseUrl, mediaUrls, filters) {
     try {
-      const response = await axios.get(cssUrl, {
-        timeout: this.timeout / 2,
-        headers: { 'User-Agent': this.userAgent }
-      });
-      
-      const urls = extractUrlsFromCss(response.data, cssUrl);
-      urls.forEach(url => {
-        if (this.shouldIncludeByType(url, filters)) {
-          mediaUrls.add(url);
+      await retryAsync(
+        async () => {
+          const response = await axios.get(cssUrl, {
+            timeout: this.timeout / 2,
+            headers: { 'User-Agent': this.userAgent }
+          });
+
+          const urls = extractUrlsFromCss(response.data, cssUrl);
+          urls.forEach(url => {
+            if (this.shouldIncludeByType(url, filters)) {
+              mediaUrls.add(url);
+            }
+          });
+        },
+        {
+          maxRetries: 2,
+          retryDelay: 500
         }
-      });
+      );
     } catch (error) {
+      // Silently fail CSS fetching as it's not critical
     }
   }
 
@@ -321,38 +342,46 @@ class MediaExtractor {
   }
 
   async validateAndGetMediaInfo(url) {
-    try {
-      const response = await axios.head(url, {
-        timeout: this.timeout / 4,
-        headers: { 'User-Agent': this.userAgent },
-        maxRedirects: this.maxRedirects
-      });
+    return retryAsync(
+      async () => {
+        try {
+          const response = await axios.head(url, {
+            timeout: this.timeout / 4,
+            headers: { 'User-Agent': this.userAgent },
+            maxRedirects: this.maxRedirects
+          });
 
-      const contentLength = response.headers['content-length'];
-      const contentType = response.headers['content-type'];
-      const lastModified = response.headers['last-modified'];
+          const contentLength = response.headers['content-length'];
+          const contentType = response.headers['content-type'];
+          const lastModified = response.headers['last-modified'];
 
-      return {
-        url,
-        type: isImageType(url) ? 'image' : 'video',
-        size: contentLength ? parseInt(contentLength) : null,
-        contentType,
-        lastModified: lastModified ? new Date(lastModified) : null,
-        status: response.status
-      };
-    } catch (error) {
-      if (error.response && error.response.status === 405) {
-        return {
-          url,
-          type: isImageType(url) ? 'image' : 'video',
-          size: null,
-          contentType: null,
-          lastModified: null,
-          status: 200
-        };
+          return {
+            url,
+            type: isImageType(url) ? 'image' : 'video',
+            size: contentLength ? parseInt(contentLength) : null,
+            contentType,
+            lastModified: lastModified ? new Date(lastModified) : null,
+            status: response.status
+          };
+        } catch (error) {
+          if (error.response && error.response.status === 405) {
+            return {
+              url,
+              type: isImageType(url) ? 'image' : 'video',
+              size: null,
+              contentType: null,
+              lastModified: null,
+              status: 200
+            };
+          }
+          throw error;
+        }
+      },
+      {
+        maxRetries: 2,
+        retryDelay: 500
       }
-      throw error;
-    }
+    );
   }
 
   shouldIncludeMedia(mediaInfo, filters) {

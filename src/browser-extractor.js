@@ -1,9 +1,9 @@
-const puppeteer = require('puppeteer');
-const { 
-  isValidUrl, 
-  normalizeUrl, 
-  isSupportedMediaType, 
-  isImageType, 
+const { getBrowserPool } = require('./browser-pool');
+const {
+  isValidUrl,
+  normalizeUrl,
+  isSupportedMediaType,
+  isImageType,
   isVideoType,
   getDomainFromUrl,
   validateMediaFilters
@@ -12,8 +12,7 @@ const {
 class BrowserMediaExtractor {
   constructor(options = {}) {
     this.timeout = options.timeout || parseInt(process.env.DOWNLOAD_TIMEOUT) || 30000;
-    this.headless = options.headless !== false;
-    this.browser = null;
+    this.browserPool = getBrowserPool(options.poolOptions);
   }
 
   async extractMedia(targetUrl, filters = {}, progressCallback = null) {
@@ -39,65 +38,9 @@ class BrowserMediaExtractor {
         throw new Error('Invalid URL provided');
       }
 
-      if (progressCallback) progressCallback('Launching browser...');
-      
-      this.browser = await puppeteer.launch({ 
-        headless: this.headless ? "new" : false,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-          '--no-first-run',
-          '--no-zygote',
-          '--disable-extensions',
-          '--disable-blink-features=AutomationControlled',
-          '--disable-features=VizDisplayCompositor'
-        ],
-        timeout: this.timeout
-      });
+      if (progressCallback) progressCallback('Acquiring browser page from pool...');
 
-      page = await this.browser.newPage();
-      
-      // Enhanced bot detection avoidance
-      await page.evaluateOnNewDocument(() => {
-        Object.defineProperty(navigator, 'webdriver', {
-          get: () => undefined,
-        });
-        
-        // Remove automation indicators
-        delete navigator.__proto__.webdriver;
-        
-        // Mock chrome runtime
-        window.chrome = {
-          runtime: {}
-        };
-        
-        // Mock permissions
-        const originalQuery = window.navigator.permissions.query;
-        window.navigator.permissions.query = (parameters) => (
-          parameters.name === 'notifications' ?
-            Promise.resolve({ state: Notification.permission }) :
-            originalQuery(parameters)
-        );
-      });
-      
-      // Set realistic user agent
-      await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-      
-      // Set viewport for proper rendering
-      await page.setViewport({ width: 1366, height: 768 });
-      
-      // Set additional headers to look more like a real browser
-      await page.setExtraHTTPHeaders({
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-        'Sec-Fetch-Site': 'none',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-User': '?1',
-        'Sec-Fetch-Dest': 'document'
-      });
+      page = await this.browserPool.acquirePage();
 
       // Collect network requests to catch dynamically loaded media
       const mediaUrls = new Set();
@@ -134,7 +77,7 @@ class BrowserMediaExtractor {
       if (progressCallback) progressCallback('Waiting for content to load...');
       
       // Wait a bit for initial content
-      await page.waitForTimeout(2000);
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       if (progressCallback) progressCallback('Triggering lazy loading...');
       
@@ -201,10 +144,7 @@ class BrowserMediaExtractor {
       });
     } finally {
       if (page) {
-        await page.close();
-      }
-      if (this.browser) {
-        await this.browser.close();
+        await this.browserPool.releasePage(page);
       }
     }
 

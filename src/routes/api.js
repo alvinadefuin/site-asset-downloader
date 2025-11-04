@@ -3,11 +3,15 @@ const fs = require('fs');
 const path = require('path');
 const MediaExtractor = require('../extractor');
 const DownloadManager = require('../downloader');
-const { createJobId, isValidUrl, formatBytes } = require('../utils');
+const { createJobId, isValidUrl, isSafeUrl, formatBytes, isValidJobId } = require('../utils');
 
 const router = express.Router();
 const extractor = new MediaExtractor();
 const downloadManager = new DownloadManager();
+
+// Memory limits for job tracking
+const MAX_ACTIVE_JOBS = 50;
+const MAX_COMPLETED_JOBS = 100;
 
 const activeJobs = new Map();
 const jobResults = new Map();
@@ -17,15 +21,31 @@ router.post('/extract', async (req, res) => {
     const { url, filters = {} } = req.body;
 
     if (!url || !isValidUrl(url)) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Invalid URL provided',
         message: 'Please provide a valid HTTP or HTTPS URL'
       });
     }
 
+    // SSRF protection: Check if URL is safe to access
+    if (!isSafeUrl(url)) {
+      return res.status(400).json({
+        error: 'Forbidden URL',
+        message: 'Cannot access private or internal network addresses'
+      });
+    }
+
+    // Check active jobs limit
+    if (activeJobs.size >= MAX_ACTIVE_JOBS) {
+      return res.status(429).json({
+        error: 'Too many active jobs',
+        message: 'Please wait for some jobs to complete before starting new ones'
+      });
+    }
+
     const jobId = createJobId();
-    activeJobs.set(jobId, { 
-      status: 'extracting', 
+    activeJobs.set(jobId, {
+      status: 'extracting',
       startTime: Date.now(),
       url,
       filters
@@ -48,6 +68,15 @@ router.post('/extract', async (req, res) => {
       });
 
       activeJobs.delete(jobId);
+
+      // Enforce memory limit on completed jobs
+      if (jobResults.size >= MAX_COMPLETED_JOBS) {
+        // Remove oldest completed job
+        const firstKey = jobResults.keys().next().value;
+        jobResults.delete(firstKey);
+        downloadManager.cleanupJob(firstKey);
+      }
+
       jobResults.set(jobId, {
         ...results,
         jobId,
@@ -75,7 +104,15 @@ router.post('/extract', async (req, res) => {
 
 router.get('/status/:jobId', (req, res) => {
   const { jobId } = req.params;
-  
+
+  // Validate job ID to prevent path traversal
+  if (!isValidJobId(jobId)) {
+    return res.status(400).json({
+      error: 'Invalid job ID',
+      message: 'Job ID contains invalid characters'
+    });
+  }
+
   if (activeJobs.has(jobId)) {
     const job = activeJobs.get(jobId);
     return res.json({
@@ -228,6 +265,14 @@ router.post('/download-bulk', async (req, res) => {
 router.get('/download-zip/:jobId', (req, res) => {
   try {
     const { jobId } = req.params;
+
+    // Validate job ID to prevent path traversal
+    if (!isValidJobId(jobId)) {
+      return res.status(400).json({
+        error: 'Invalid job ID',
+        message: 'Job ID contains invalid characters'
+      });
+    }
     const zipPath = path.join(__dirname, '..', '..', 'downloads', `${jobId}_archive.zip`);
 
     if (!fs.existsSync(zipPath)) {
@@ -254,7 +299,15 @@ router.get('/download-zip/:jobId', (req, res) => {
 router.delete('/cleanup/:jobId', (req, res) => {
   try {
     const { jobId } = req.params;
-    
+
+    // Validate job ID to prevent path traversal
+    if (!isValidJobId(jobId)) {
+      return res.status(400).json({
+        error: 'Invalid job ID',
+        message: 'Job ID contains invalid characters'
+      });
+    }
+
     activeJobs.delete(jobId);
     jobResults.delete(jobId);
     

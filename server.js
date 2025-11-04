@@ -9,8 +9,54 @@ const winston = require('winston');
 
 dotenv.config();
 
+// Validate required environment variables
+const requiredEnvVars = ['PORT'];
+const optionalEnvVars = {
+  MAX_FILE_SIZE: '104857600',
+  DOWNLOAD_TIMEOUT: '30000',
+  CONCURRENT_DOWNLOADS: '5',
+  CLEANUP_INTERVAL: '3600000',
+  LOG_LEVEL: 'info',
+  RATE_LIMIT_WINDOW: '900000',
+  RATE_LIMIT_MAX: '100',
+  NODE_ENV: 'development'
+};
+
+// Check required variables
+const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+if (missingVars.length > 0) {
+  console.warn(`Warning: Missing environment variables: ${missingVars.join(', ')}`);
+  console.warn('Using default values. Consider creating a .env file from .env.example');
+}
+
+// Set defaults for optional variables
+Object.entries(optionalEnvVars).forEach(([key, defaultValue]) => {
+  if (!process.env[key]) {
+    process.env[key] = defaultValue;
+  }
+});
+
+// Validate numeric values
+const numericVars = ['PORT', 'MAX_FILE_SIZE', 'DOWNLOAD_TIMEOUT', 'CONCURRENT_DOWNLOADS', 'CLEANUP_INTERVAL', 'RATE_LIMIT_WINDOW', 'RATE_LIMIT_MAX'];
+numericVars.forEach(varName => {
+  if (process.env[varName] && isNaN(parseInt(process.env[varName]))) {
+    console.error(`Error: ${varName} must be a number. Got: ${process.env[varName]}`);
+    process.exit(1);
+  }
+});
+
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Ensure required directories exist
+const requiredDirs = ['logs', 'downloads', 'downloads/images', 'downloads/videos'];
+requiredDirs.forEach(dir => {
+  const dirPath = path.join(__dirname, dir);
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true });
+    console.log(`Created directory: ${dir}`);
+  }
+});
 
 const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',

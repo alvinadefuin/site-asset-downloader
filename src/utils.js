@@ -16,6 +16,81 @@ function isValidUrl(urlString) {
   }
 }
 
+function isPrivateIP(hostname) {
+  // Check for localhost
+  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') {
+    return true;
+  }
+
+  // Check for IPv4 private ranges
+  const ipv4Patterns = [
+    /^10\./,                       // 10.0.0.0/8
+    /^172\.(1[6-9]|2[0-9]|3[0-1])\./, // 172.16.0.0/12
+    /^192\.168\./,                 // 192.168.0.0/16
+    /^169\.254\./,                 // 169.254.0.0/16 (link-local)
+    /^127\./                       // 127.0.0.0/8 (loopback)
+  ];
+
+  if (ipv4Patterns.some(pattern => pattern.test(hostname))) {
+    return true;
+  }
+
+  // Check for IPv6 private/local addresses
+  if (hostname.includes(':')) {
+    const ipv6Patterns = [
+      /^fe80:/i,    // Link-local
+      /^fc00:/i,    // Unique local
+      /^fd00:/i,    // Unique local
+      /^::1$/,      // Loopback
+      /^::/         // Unspecified
+    ];
+    return ipv6Patterns.some(pattern => pattern.test(hostname));
+  }
+
+  return false;
+}
+
+function isSafeUrl(urlString) {
+  if (!isValidUrl(urlString)) {
+    return false;
+  }
+
+  try {
+    const urlObj = new URL(urlString);
+    const hostname = urlObj.hostname;
+
+    // Reject private/internal IPs
+    if (isPrivateIP(hostname)) {
+      return false;
+    }
+
+    // Reject URLs with credentials embedded
+    if (urlObj.username || urlObj.password) {
+      return false;
+    }
+
+    // Reject file:// and other non-http protocols
+    if (urlObj.protocol !== 'http:' && urlObj.protocol !== 'https:') {
+      return false;
+    }
+
+    // Additional checks for metadata endpoints (cloud services)
+    const dangerousHostnames = [
+      'metadata.google.internal',
+      '169.254.169.254',          // AWS, Azure, Google Cloud metadata
+      'instance-data'
+    ];
+
+    if (dangerousHostnames.some(dangerous => hostname.includes(dangerous))) {
+      return false;
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function normalizeUrl(urlString, baseUrl) {
   try {
     if (urlString.startsWith('//')) {
@@ -186,14 +261,81 @@ function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+async function retryAsync(fn, options = {}) {
+  const {
+    maxRetries = 3,
+    retryDelay = 1000,
+    backoffMultiplier = 2,
+    onRetry = null
+  } = options;
+
+  let lastError;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+
+      // Don't retry on certain errors
+      if (error.response) {
+        const status = error.response.status;
+        // Don't retry on client errors (except 429 Too Many Requests and 408 Request Timeout)
+        if (status >= 400 && status < 500 && status !== 429 && status !== 408) {
+          throw error;
+        }
+      }
+
+      if (attempt < maxRetries) {
+        const waitTime = retryDelay * Math.pow(backoffMultiplier, attempt);
+
+        if (onRetry) {
+          onRetry(attempt + 1, maxRetries, waitTime, error);
+        }
+
+        await delay(waitTime);
+      }
+    }
+  }
+
+  throw lastError;
+}
+
+function sanitizeJobId(jobId) {
+  // Only allow alphanumeric characters and hyphens/underscores
+  // Prevent path traversal attacks
+  if (!jobId || typeof jobId !== 'string') {
+    return null;
+  }
+
+  // Remove any path separators and special characters
+  const sanitized = jobId.replace(/[^a-zA-Z0-9_-]/g, '');
+
+  // Ensure it's not empty after sanitization
+  if (sanitized.length === 0 || sanitized.length > 64) {
+    return null;
+  }
+
+  return sanitized;
+}
+
+function isValidJobId(jobId) {
+  const sanitized = sanitizeJobId(jobId);
+  return sanitized !== null && sanitized === jobId;
+}
+
 module.exports = {
   isValidUrl,
+  isSafeUrl,
+  isPrivateIP,
   normalizeUrl,
   getFileExtension,
   isSupportedMediaType,
   isImageType,
   isVideoType,
   sanitizeFilename,
+  sanitizeJobId,
+  isValidJobId,
   generateUniqueFilename,
   extractUrlsFromCss,
   formatBytes,
@@ -202,6 +344,7 @@ module.exports = {
   validateMediaFilters,
   getDomainFromUrl,
   delay,
+  retryAsync,
   SUPPORTED_IMAGE_EXTENSIONS,
   SUPPORTED_VIDEO_EXTENSIONS,
   SUPPORTED_EXTENSIONS
