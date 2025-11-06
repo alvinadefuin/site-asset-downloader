@@ -1,4 +1,4 @@
-FROM node:18-alpine
+FROM node:20-alpine
 
 LABEL maintainer="Site Asset Downloader"
 LABEL description="A comprehensive web-based media extractor tool"
