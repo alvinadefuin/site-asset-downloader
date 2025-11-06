@@ -6,8 +6,17 @@ LABEL description="A comprehensive web-based media extractor tool"
 WORKDIR /app
 
 RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont \
     dumb-init \
     && rm -rf /var/cache/apk/*
+
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 COPY package*.json ./
 

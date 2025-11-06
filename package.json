@@ -32,7 +32,7 @@
     "winston": "^3.11.0",
     "dotenv": "^16.3.1",
     "mime-types": "^2.1.35",
-    "puppeteer": "^21.6.1"
+    "puppeteer-core": "^21.6.1"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"

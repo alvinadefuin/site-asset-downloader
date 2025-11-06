@@ -1,4 +1,4 @@
-const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer-core');
 
 class BrowserPool {
   constructor(options = {}) {
@@ -34,7 +34,11 @@ class BrowserPool {
   }
 
   async createBrowser() {
+    const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH ||
+                          (process.platform === 'linux' ? '/usr/bin/chromium-browser' : undefined);
+
     return await puppeteer.launch({
+      executablePath,
       headless: "new",
       args: [
         '--no-sandbox',
