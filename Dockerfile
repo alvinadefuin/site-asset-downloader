@@ -1,33 +1,43 @@
-FROM node:20-alpine
+# Multi-stage build for faster deployment
+# Stage 1: Dependencies
+FROM node:20-alpine AS dependencies
+
+WORKDIR /app
+
+# Install only production dependencies
+COPY package*.json ./
+RUN npm ci --only=production && npm cache clean --force
+
+# Stage 2: Final image with Chromium
+FROM zenika/alpine-chrome:124-with-node-20
 
 LABEL maintainer="Site Asset Downloader"
 LABEL description="A comprehensive web-based media extractor tool"
 
 WORKDIR /app
 
-RUN apk add --no-cache \
-    chromium \
-    nss \
-    freetype \
-    harfbuzz \
-    ca-certificates \
-    ttf-freefont \
-    dumb-init \
-    && rm -rf /var/cache/apk/*
+# Install dumb-init for proper signal handling
+USER root
+RUN apk add --no-cache dumb-init && rm -rf /var/cache/apk/*
 
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+# Copy dependencies from build stage
+COPY --from=dependencies /app/node_modules ./node_modules
 
-COPY package*.json ./
+# Copy application code
+COPY --chown=chrome:chrome . .
 
-RUN npm ci --only=production && npm cache clean --force
-
-COPY . .
-
+# Create required directories
 RUN mkdir -p downloads/images downloads/videos logs && \
-    chown -R node:node /app
+    chown -R chrome:chrome /app
 
-USER node
+# Set environment variables for puppeteer-core
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
+    CHROME_BIN=/usr/bin/chromium-browser \
+    CHROME_PATH=/usr/lib/chromium/
+
+# Switch to non-root user
+USER chrome
 
 EXPOSE 3000
 
