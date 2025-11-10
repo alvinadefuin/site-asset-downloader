@@ -34,8 +34,17 @@ class BrowserPool {
   }
 
   async createBrowser() {
-    const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH ||
-                          (process.platform === 'linux' ? '/usr/bin/chromium-browser' : undefined);
+    // Determine Chrome executable path based on platform
+    let executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+
+    if (!executablePath) {
+      if (process.platform === 'linux') {
+        executablePath = '/usr/bin/chromium-browser';
+      } else if (process.platform === 'darwin') {
+        executablePath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+      }
+      // Windows and other platforms: puppeteer-core will try to find Chrome automatically
+    }
 
     return await puppeteer.launch({
       executablePath,

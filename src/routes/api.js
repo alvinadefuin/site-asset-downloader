@@ -2,11 +2,13 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const MediaExtractor = require('../extractor');
+const BrowserMediaExtractor = require('../browser-extractor');
 const DownloadManager = require('../downloader');
 const { createJobId, isValidUrl, isSafeUrl, formatBytes, isValidJobId } = require('../utils');
 
 const router = express.Router();
 const extractor = new MediaExtractor();
+const browserExtractor = new BrowserMediaExtractor();
 const downloadManager = new DownloadManager();
 
 // Memory limits for job tracking
@@ -59,7 +61,8 @@ router.post('/extract', async (req, res) => {
     });
 
     try {
-      const results = await extractor.extractMedia(url, filters, (progress) => {
+      // Use browser extractor for better JavaScript-rendered content support
+      const results = await browserExtractor.extractMedia(url, filters, (progress) => {
         const job = activeJobs.get(jobId);
         if (job) {
           job.progress = progress;

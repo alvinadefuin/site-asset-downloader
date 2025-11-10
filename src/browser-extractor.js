@@ -170,7 +170,7 @@ class BrowserMediaExtractor {
   async simulateInteractions(page) {
     try {
       // Find elements that might trigger media loading on hover
-      const hoverElements = await page.$$eval('[data-*], .preview, .thumbnail, .gallery-item, .media-item, video, img', 
+      const hoverElements = await page.$$eval('.preview, .thumbnail, .gallery-item, .media-item, video, img, [data-src], [data-lazy]', 
         elements => elements.map(el => {
           const rect = el.getBoundingClientRect();
           return {
@@ -262,7 +262,7 @@ class BrowserMediaExtractor {
       });
 
       // Look for URLs in data attributes of all elements
-      document.querySelectorAll('[data-*]').forEach(element => {
+      document.querySelectorAll('*').forEach(element => {
         Array.from(element.attributes).forEach(attr => {
           if (attr.name.startsWith('data-') && attr.value) {
             // Check if the value looks like a media URL

@@ -48,6 +48,12 @@ numericVars.forEach(varName => {
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Trust proxy for Railway/production environments
+// This is required when behind reverse proxies like Railway, Heroku, etc.
+if (process.env.NODE_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT) {
+  app.set('trust proxy', 1);
+}
+
 // Ensure required directories exist
 const requiredDirs = ['logs', 'downloads', 'downloads/images', 'downloads/videos'];
 requiredDirs.forEach(dir => {
