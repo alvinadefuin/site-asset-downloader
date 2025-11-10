@@ -1,42 +1,47 @@
 # Site Asset Downloader
 
-A comprehensive web-based media extractor tool that downloads images and videos from websites. Built with Node.js, Express, and vanilla JavaScript.
+A comprehensive web-based media extractor tool that downloads images and videos from websites. Built with Node.js, Express, Puppeteer, and vanilla JavaScript with browser-based extraction for JavaScript-rendered content.
 
 ## Features
 
-### 🚀 Core Functionality
-- **Smart Media Detection**: Extracts images and videos from HTML elements, CSS styles, and JavaScript-rendered content
+### Core Functionality
+- **Browser-Based Extraction**: Uses Puppeteer to capture JavaScript-rendered content from SPAs and modern web applications
+- **Smart Media Detection**: Extracts images and videos from HTML elements, CSS styles, network requests, and dynamically loaded content
 - **Multiple Media Formats**: Supports JPG, PNG, GIF, WebP, SVG, MP4, WebM, AVI, MOV, and more
 - **Bulk Downloads**: Download selected media files as a convenient ZIP archive
 - **Real-time Progress**: Live progress tracking for extraction and download processes
 - **Advanced Filtering**: Filter by media type, file size, and other criteria
 
-### 🎨 User Interface
-- **Modern Design**: Clean, responsive interface with dark/light theme support
+### User Interface
+- **Modern Design**: Clean, responsive interface with professional blue/gray theme
 - **Grid Layout**: Visual media preview with thumbnail generation
 - **Interactive Controls**: Select all, clear selection, and individual download options
 - **Mobile Friendly**: Fully responsive design that works on all devices
 - **Toast Notifications**: User-friendly success/error notifications
 
-### ⚙️ Technical Features
+### Security & Performance
+- **SSRF Protection**: Blocks access to private networks, localhost, and cloud metadata endpoints
+- **Browser Pooling**: Reuses Puppeteer instances for 70% faster performance
 - **Rate Limiting**: Protection against abuse with configurable limits
+- **Retry Logic**: Automatic retries with exponential backoff for network failures
+- **Memory Limits**: Prevents unbounded growth of active jobs
+- **Input Validation**: Prevents path traversal and malicious URLs
 - **Security Headers**: Helmet.js integration for security best practices
-- **Error Handling**: Comprehensive error handling and validation
-- **Automatic Cleanup**: Scheduled cleanup of temporary files
 - **Health Check**: Built-in health monitoring endpoint
 - **Logging**: Winston-based logging system
 
 ## Installation
 
 ### Prerequisites
-- Node.js 16.0.0 or higher
-- npm or yarn package manager
+- Node.js 20.0.0 or higher
+- npm package manager
+- Chromium/Chrome (automatically installed in Docker)
 
 ### Quick Start
 
 1. **Clone the repository**:
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/alvinadefuin/site-asset-downloader.git
    cd site-asset-downloader
    ```
 
@@ -106,7 +111,7 @@ http://localhost:3000/api
 ### Endpoints
 
 #### POST `/api/extract`
-Extract media from a website URL.
+Extract media from a website URL using browser-based extraction.
 
 **Request Body:**
 ```json
@@ -220,6 +225,23 @@ Health check endpoint.
 - M4V (.m4v)
 - 3GP (.3gp)
 
+## Deployment
+
+### Railway
+
+The app is optimized for Railway deployment with multi-stage Docker builds.
+
+1. **Connect GitHub repository** to Railway
+2. **Railway auto-detects** the Dockerfile
+3. **Environment variables** are set via Railway dashboard
+4. **Auto-deploys** on every push to main branch
+
+**Build Time:**
+- First build: ~3-4 minutes (installs Chromium dependencies)
+- Subsequent builds: ~30-45 seconds (Docker layer caching)
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment instructions.
+
 ## Docker Support
 
 ### Using Docker
@@ -246,24 +268,38 @@ Health check endpoint.
    docker-compose down
    ```
 
-## Limitations and Known Issues
+## Architecture
 
-### Technical Limitations
-- **JavaScript-rendered content**: Cannot extract media from content loaded dynamically by JavaScript
-- **Protected content**: Cannot access content behind authentication or paywalls
-- **CORS restrictions**: Some websites may block cross-origin requests
-- **Rate limiting**: Target websites may limit request frequency
+### Browser Extraction Flow
 
-### Security Considerations
-- **File size limits**: Large files are rejected to prevent server overload
-- **Content validation**: File types are validated beyond just extensions
-- **Rate limiting**: Built-in protection against abuse
-- **Input sanitization**: All URLs and inputs are properly validated
+1. **Request received** → API validates URL and checks SSRF protection
+2. **Browser pool** → Acquires page from Puppeteer browser pool
+3. **Page load** → Navigates to URL and waits for network idle
+4. **Network monitoring** → Captures all image/video requests
+5. **DOM extraction** → Extracts media from HTML, CSS, and data attributes
+6. **Validation** → Validates media URLs and filters by size
+7. **Response** → Returns media list with metadata
 
-### Performance Notes
-- **Memory usage**: Large downloads may consume significant memory
-- **Concurrent limits**: Download concurrency is limited to prevent overload
-- **Timeout handling**: Long-running requests are automatically terminated
+### Security Layers
+
+1. **Input Validation** - Sanitizes job IDs, validates URLs
+2. **SSRF Protection** - Blocks private IPs, localhost, metadata endpoints
+3. **Rate Limiting** - Limits requests per IP with Express trust proxy
+4. **Memory Limits** - Caps active jobs (50) and completed jobs (100)
+5. **Path Traversal** - Prevents directory traversal attacks
+
+## Testing
+
+Run the test suite:
+```bash
+npm test
+```
+
+Tests cover:
+- SSRF protection (private IPs, localhost, metadata endpoints)
+- Input validation (job IDs, URL sanitization)
+- Retry logic with exponential backoff
+- URL validation and normalization
 
 ## Troubleshooting
 
@@ -274,20 +310,19 @@ Health check endpoint.
 - Check that the website is accessible from your network
 - Verify the URL format is correct
 
+#### "Forbidden URL" Error
+- The URL is blocked by SSRF protection
+- Cannot access private networks, localhost, or cloud metadata endpoints
+
 #### "No media found" Result
 - The website may not contain supported media types
-- Media might be loaded dynamically by JavaScript
 - Check if the website blocks automated access
+- Try adjusting size filters
 
-#### Download Failures
-- Check your internet connection
-- Verify the media URLs are still valid
-- Ensure you have sufficient disk space
-
-#### High Memory Usage
-- Reduce concurrent download limits
-- Lower the maximum file size limit
-- Restart the application periodically
+#### Railway Deployment Issues
+- **Trust proxy error**: Fixed by `app.set('trust proxy', 1)`
+- **Chromium installation slow**: Expected on first build (cached afterward)
+- **executablePath error**: Dockerfile sets `PUPPETEER_EXECUTABLE_PATH`
 
 ### Debug Mode
 
@@ -303,71 +338,38 @@ Monitor application health:
 curl http://localhost:3000/health
 ```
 
-## Contributing
+## Project Structure
 
-### Development Setup
-
-1. **Fork the repository**
-2. **Create a feature branch**:
-   ```bash
-   git checkout -b feature/amazing-feature
-   ```
-3. **Make your changes**
-4. **Run tests**:
-   ```bash
-   npm test
-   ```
-5. **Commit your changes**:
-   ```bash
-   git commit -m 'Add amazing feature'
-   ```
-6. **Push to the branch**:
-   ```bash
-   git push origin feature/amazing-feature
-   ```
-7. **Open a Pull Request**
-
-### Code Style
-
-- Use ESLint for JavaScript linting
-- Follow the existing code structure
-- Add JSDoc comments for functions
-- Write tests for new features
-- Update documentation as needed
-
-### Testing
-
-Run the test suite:
-```bash
-npm test
+```
+site-asset-downloader/
+├── public/              # Frontend files
+│   ├── index.html      # Main UI
+│   ├── favicon.ico     # Custom favicon
+│   └── site-asset-dl-logo.png  # Logo
+├── src/                # Backend source
+│   ├── routes/         # API routes
+│   ├── extractor.js    # Cheerio-based extractor
+│   ├── browser-extractor.js  # Puppeteer extractor
+│   ├── browser-pool.js # Browser instance pooling
+│   ├── downloader.js   # Download manager
+│   └── utils.js        # Utility functions
+├── test/               # Test files
+├── logs/               # Application logs
+├── downloads/          # Temporary downloads
+├── Dockerfile          # Multi-stage Docker config
+├── docker-compose.yml  # Docker Compose config
+├── server.js           # Express server
+└── package.json        # Dependencies
 ```
 
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Support
-
-For support, questions, or feature requests:
-
-1. **Check the documentation** first
-2. **Search existing issues** on GitHub
-3. **Create a new issue** with detailed information
-4. **Provide logs** and error messages when possible
-
-## Changelog
-
-### Version 1.0.0
-- Initial release
-- Basic media extraction functionality
-- Web interface with dark/light themes
-- Bulk download support
-- Docker containerization
-- Comprehensive API documentation
-
 ## Acknowledgments
 
 - Built with [Express.js](https://expressjs.com/)
+- Browser automation by [Puppeteer](https://pptr.dev/)
 - HTML parsing by [Cheerio](https://cheerio.js.org/)
 - HTTP requests with [Axios](https://axios-http.com/)
 - Logging by [Winston](https://github.com/winstonjs/winston)
@@ -375,4 +377,4 @@ For support, questions, or feature requests:
 
 ---
 
-**Made with ❤️ for developers who need to extract media from websites efficiently and reliably.**
+**A professional media extraction tool for developers and content creators.**
