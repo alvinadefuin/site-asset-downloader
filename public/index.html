@@ -37,6 +37,15 @@
             font-size: clamp(1.5rem, 4vw, 2.5rem);
             font-weight: 700;
             margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+        }
+
+        .header h1 img {
+            height: 1em;
+            width: auto;
         }
 
         .header p {
@@ -412,8 +421,10 @@
 <body>
     <div class="header">
         <div class="header-content">
-            <img src="/site-asset-dl-logo.png" alt="Site Asset Downloader" style="height: 64px; margin-bottom: 1rem; display: block; margin-left: auto; margin-right: auto;">
-            <h1>Site Asset Downloader</h1>
+            <h1>
+                <img src="/site-asset-dl-logo.png" alt="Site Asset Downloader">
+                Site Asset Downloader
+            </h1>
             <p>Download images and videos from any website</p>
         </div>
     </div>
